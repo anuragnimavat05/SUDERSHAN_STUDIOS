@@ -1,0 +1,529 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Primitive Helpers
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrapAdmin() {
+      return isVerified() && request.auth.token.email == 'nimavatanurag47@gmail.com';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isNonEmptyString(val, maxLen) {
+      return val is string && val.size() >= 1 && val.size() <= maxLen;
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isBoundedList(val, maxSize) {
+      return val is list && val.size() <= maxSize;
+    }
+
+    function isValidMemberUids(listVal) {
+      return listVal is list && listVal.size() >= 1 && listVal.size() <= 25 && listVal[0] is string;
+    }
+
+    // Master Gate Helpers (Parent Client Workspace Lookup)
+    function clientDoc(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId));
+    }
+
+    function clientExists(clientId) {
+      return exists(/databases/$(database)/documents/clients/$(clientId));
+    }
+
+    function clientRole(clientId) {
+      return request.auth.uid in clientDoc(clientId).data.memberRoles
+        ? clientDoc(clientId).data.memberRoles[request.auth.uid]
+        : '';
+    }
+
+    function isClientMember(clientId) {
+      return isSignedIn() && (
+        isBootstrapAdmin() ||
+        (clientExists(clientId) && request.auth.uid in clientDoc(clientId).data.memberUids)
+      );
+    }
+
+    function isClientAdmin(clientId) {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (clientExists(clientId) && (
+          clientDoc(clientId).data.ownerUid == request.auth.uid ||
+          clientRole(clientId) == 'admin'
+        ))
+      );
+    }
+
+    function isClientEditor(clientId) {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (clientExists(clientId) && (
+          clientDoc(clientId).data.ownerUid == request.auth.uid ||
+          clientRole(clientId) in ['admin', 'strategist']
+        ))
+      );
+    }
+
+    function isClientReviewer(clientId) {
+      return isVerified() && clientExists(clientId) && clientRole(clientId) == 'client_reviewer';
+    }
+
+    // =========================================================================
+    // Validation Blueprints
+    // =========================================================================
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'agencyRole', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'agencyRole', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == userId
+        && isNonEmptyString(data.email, 200)
+        && isNonEmptyString(data.displayName, 120)
+        && data.agencyRole in ['admin', 'strategist', 'client_reviewer']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClientWorkspace(data) {
+      return data.keys().hasAll([
+          'name', 'monogram', 'industry', 'ownerUid', 'memberUids',
+          'memberRoles', 'defaultLanguages', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'name', 'monogram', 'industry', 'website', 'primaryMarkets',
+          'brandSummary', 'bannedTerms', 'defaultLanguages', 'brightBeanWorkspaceId',
+          'brightBeanWebhookUrl', 'ownerUid', 'memberUids', 'memberRoles',
+          'memberDirectory', 'createdAt', 'updatedAt'
+        ])
+        && isNonEmptyString(data.name, 120)
+        && isNonEmptyString(data.monogram, 4)
+        && isNonEmptyString(data.industry, 100)
+        && isOptionalString(data, 'website', 300)
+        && isOptionalString(data, 'primaryMarkets', 200)
+        && isOptionalString(data, 'brandSummary', 2000)
+        && isOptionalString(data, 'bannedTerms', 500)
+        && isOptionalString(data, 'brightBeanWorkspaceId', 120)
+        && isOptionalString(data, 'brightBeanWebhookUrl', 400)
+        && isValidId(data.ownerUid)
+        && isValidMemberUids(data.memberUids)
+        && data.ownerUid in data.memberUids
+        && data.memberRoles is map
+        && data.memberRoles.size() <= 25
+        && isBoundedList(data.defaultLanguages, 5)
+        && data.defaultLanguages.size() >= 1
+        && data.defaultLanguages[0] is string
+        && (!('memberDirectory' in data) || isBoundedList(data.memberDirectory, 25))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMemoryItem(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'category', 'title', 'detail', 'languageScope',
+          'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'category', 'title', 'detail', 'languageScope',
+          'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.clientId == clientId
+        && data.category in ['voice_rule', 'audience_persona', 'content_pillar', 'cultural_context', 'do_not_use', 'winning_pattern']
+        && isNonEmptyString(data.title, 140)
+        && isNonEmptyString(data.detail, 2000)
+        && data.languageScope in ['all', 'en', 'hi', 'gu']
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMonthlyCalendar(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'monthLabel', 'objective', 'cadencePerWeek',
+          'slots', 'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'monthLabel', 'objective', 'cadencePerWeek',
+          'slots', 'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.clientId == clientId
+        && isNonEmptyString(data.monthLabel, 60)
+        && isNonEmptyString(data.objective, 400)
+        && data.cadencePerWeek is number && data.cadencePerWeek >= 1 && data.cadencePerWeek <= 21
+        && isBoundedList(data.slots, 35)
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContentAsset(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'title', 'assetType', 'platform', 'status',
+          'version', 'languages', 'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'title', 'assetType', 'platform', 'pillar', 'status',
+          'version', 'languages', 'captions', 'hashtags', 'cta', 'reelHooks',
+          'reelScenes', 'repurposedOutputs', 'reviewerNote', 'brightBeanStatus',
+          'brightBeanReference', 'authorUid', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.clientId == clientId
+        && isNonEmptyString(data.title, 160)
+        && data.assetType in ['caption_pack', 'reel_script', 'repurposed_kit', 'calendar_brief', 'competitor_counter']
+        && isNonEmptyString(data.platform, 60)
+        && isOptionalString(data, 'pillar', 100)
+        && data.status in ['draft', 'in_review', 'revision_requested', 'approved', 'handed_off']
+        && data.version is number && data.version >= 1 && data.version <= 100
+        && isBoundedList(data.languages, 5) && data.languages.size() >= 1 && data.languages[0] is string
+        && (!('captions' in data) || data.captions is map)
+        && (!('hashtags' in data) || isBoundedList(data.hashtags, 30))
+        && isOptionalString(data, 'cta', 300)
+        && (!('reelHooks' in data) || isBoundedList(data.reelHooks, 10))
+        && (!('reelScenes' in data) || isBoundedList(data.reelScenes, 25))
+        && (!('repurposedOutputs' in data) || data.repurposedOutputs is map)
+        && isOptionalString(data, 'reviewerNote', 1500)
+        && (!('brightBeanStatus' in data) || data.brightBeanStatus in ['pending', 'exported', 'webhook_sent'])
+        && isOptionalString(data, 'brightBeanReference', 200)
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAssetRevision(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'assetId', 'version', 'action', 'note',
+          'actorName', 'actorRole', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'assetId', 'version', 'action', 'note',
+          'actorName', 'actorRole', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.clientId == clientId
+        && isValidId(data.assetId)
+        && data.version is number && data.version >= 1 && data.version <= 100
+        && data.action in ['created', 'submitted', 'revision_requested', 'revised', 'approved', 'handed_off']
+        && isNonEmptyString(data.note, 1500)
+        && isNonEmptyString(data.actorName, 120)
+        && data.actorRole in ['admin', 'strategist', 'client_reviewer']
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCompetitorReport(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'competitorName', 'summary', 'hookPatterns',
+          'contentGaps', 'counterAngles', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'competitorName', 'sourceUrl', 'summary', 'hookPatterns',
+          'contentGaps', 'counterAngles', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.clientId == clientId
+        && isNonEmptyString(data.competitorName, 120)
+        && isOptionalString(data, 'sourceUrl', 400)
+        && isNonEmptyString(data.summary, 2000)
+        && isBoundedList(data.hookPatterns, 15)
+        && isBoundedList(data.contentGaps, 15)
+        && isBoundedList(data.counterAngles, 15)
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPerformanceMetric(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'postTitle', 'publishedDate', 'format', 'language',
+          'reach', 'likes', 'comments', 'saves', 'shares', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'postTitle', 'publishedDate', 'format', 'language', 'pillar',
+          'reach', 'likes', 'comments', 'saves', 'shares', 'avgWatchSec',
+          'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.clientId == clientId
+        && isNonEmptyString(data.postTitle, 160)
+        && isNonEmptyString(data.publishedDate, 30)
+        && data.format in ['Reel', 'Carousel', 'Static', 'Story']
+        && data.language in ['English', 'Hindi', 'Gujarati', 'Multilingual']
+        && isOptionalString(data, 'pillar', 100)
+        && data.reach is number && data.reach >= 0
+        && data.likes is number && data.likes >= 0
+        && data.comments is number && data.comments >= 0
+        && data.saves is number && data.saves >= 0
+        && data.shares is number && data.shares >= 0
+        && (!('avgWatchSec' in data) || (data.avgWatchSec is number && data.avgWatchSec >= 0))
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPerformanceInsight(data, clientId) {
+      return data.keys().hasAll([
+          'clientId', 'headline', 'executiveSummary', 'doubleDown',
+          'adjustments', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'clientId', 'headline', 'executiveSummary', 'doubleDown',
+          'adjustments', 'nextMonthExperiment', 'authorUid', 'memberUids', 'createdAt'
+        ])
+        && data.clientId == clientId
+        && isNonEmptyString(data.headline, 180)
+        && isNonEmptyString(data.executiveSummary, 2000)
+        && isBoundedList(data.doubleDown, 12)
+        && isBoundedList(data.adjustments, 12)
+        && isOptionalString(data, 'nextMonthExperiment', 800)
+        && isValidId(data.authorUid)
+        && isValidMemberUids(data.memberUids)
+        && data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isBootstrapAdmin());
+      allow list: if isBootstrapAdmin();
+      allow create: if isVerified()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isBootstrapAdmin() && incoming().agencyRole == 'admin') ||
+          (!isBootstrapAdmin() && incoming().agencyRole in ['strategist', 'client_reviewer'])
+        );
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isBootstrapAdmin() ||
+          (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']))
+        );
+      allow delete: if isBootstrapAdmin() && isValidId(userId);
+    }
+
+    match /clients/{clientId} {
+      allow get: if isSignedIn() && isValidId(clientId) && (
+        isBootstrapAdmin() ||
+        request.auth.uid in existing().memberUids
+      );
+      allow list: if isSignedIn() && (
+        isBootstrapAdmin() ||
+        request.auth.uid in existing().memberUids
+      );
+      allow create: if isVerified()
+        && isValidId(clientId)
+        && isValidClientWorkspace(incoming())
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerified()
+        && isValidId(clientId)
+        && isValidClientWorkspace(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isBootstrapAdmin() ||
+          (
+            (existing().ownerUid == request.auth.uid || (request.auth.uid in existing().memberRoles && existing().memberRoles[request.auth.uid] == 'admin'))
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'monogram', 'industry', 'website', 'primaryMarkets',
+              'brandSummary', 'bannedTerms', 'defaultLanguages', 'brightBeanWorkspaceId',
+              'brightBeanWebhookUrl', 'memberUids', 'memberRoles', 'memberDirectory', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerified()
+        && isValidId(clientId)
+        && (isBootstrapAdmin() || existing().ownerUid == request.auth.uid);
+
+      match /memory/{memoryId} {
+        allow get: if isValidId(clientId) && isValidId(memoryId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(memoryId)
+          && isValidMemoryItem(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isClientEditor(clientId);
+        allow update: if isVerified()
+          && isValidId(clientId)
+          && isValidId(memoryId)
+          && isValidMemoryItem(incoming(), clientId)
+          && incoming().clientId == existing().clientId
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isClientEditor(clientId)
+          && (
+            isBootstrapAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['category', 'title', 'detail', 'languageScope', 'memberUids', 'updatedAt'])
+          );
+        allow delete: if isValidId(clientId) && isValidId(memoryId) && isClientEditor(clientId);
+      }
+
+      match /calendars/{calendarId} {
+        allow get: if isValidId(clientId) && isValidId(calendarId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(calendarId)
+          && isValidMonthlyCalendar(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isClientEditor(clientId);
+        allow update: if isVerified()
+          && isValidId(clientId)
+          && isValidId(calendarId)
+          && isValidMonthlyCalendar(incoming(), clientId)
+          && incoming().clientId == existing().clientId
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isClientEditor(clientId)
+          && (
+            isBootstrapAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['monthLabel', 'objective', 'cadencePerWeek', 'slots', 'memberUids', 'updatedAt'])
+          );
+        allow delete: if isValidId(clientId) && isValidId(calendarId) && isClientEditor(clientId);
+      }
+
+      match /assets/{assetId} {
+        allow get: if isValidId(clientId) && isValidId(assetId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(assetId)
+          && isValidContentAsset(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().status in ['draft', 'in_review']
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && isClientEditor(clientId);
+        allow update: if isVerified()
+          && isValidId(clientId)
+          && isValidId(assetId)
+          && isValidContentAsset(incoming(), clientId)
+          && incoming().clientId == existing().clientId
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isClientAdmin(clientId) ||
+            (
+              isClientEditor(clientId)
+              && existing().status != 'handed_off'
+              && incoming().status in ['draft', 'in_review', 'approved', 'handed_off']
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'title', 'platform', 'pillar', 'status', 'version', 'languages',
+                'captions', 'hashtags', 'cta', 'reelHooks', 'reelScenes',
+                'repurposedOutputs', 'reviewerNote', 'brightBeanStatus',
+                'brightBeanReference', 'memberUids', 'updatedAt'
+              ])
+            ) ||
+            (
+              isClientReviewer(clientId)
+              && existing().status == 'in_review'
+              && incoming().status in ['revision_requested', 'approved']
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewerNote', 'updatedAt'])
+            )
+          );
+        allow delete: if isValidId(clientId) && isValidId(assetId) && isClientAdmin(clientId);
+      }
+
+      match /revisions/{revisionId} {
+        allow get: if isValidId(clientId) && isValidId(revisionId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(revisionId)
+          && isValidAssetRevision(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && isClientMember(clientId);
+        allow update: if false;
+        allow delete: if isValidId(clientId) && isValidId(revisionId) && isClientAdmin(clientId);
+      }
+
+      match /competitors/{reportId} {
+        allow get: if isValidId(clientId) && isValidId(reportId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(reportId)
+          && isValidCompetitorReport(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && isClientEditor(clientId);
+        allow update: if false;
+        allow delete: if isValidId(clientId) && isValidId(reportId) && isClientEditor(clientId);
+      }
+
+      match /metrics/{metricId} {
+        allow get: if isValidId(clientId) && isValidId(metricId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(metricId)
+          && isValidPerformanceMetric(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && isClientEditor(clientId);
+        allow update: if false;
+        allow delete: if isValidId(clientId) && isValidId(metricId) && isClientEditor(clientId);
+      }
+
+      match /insights/{insightId} {
+        allow get: if isValidId(clientId) && isValidId(insightId) && isClientMember(clientId);
+        allow list: if isSignedIn() && (isBootstrapAdmin() || request.auth.uid in existing().memberUids);
+        allow create: if isVerified()
+          && isValidId(clientId)
+          && isValidId(insightId)
+          && isValidPerformanceInsight(incoming(), clientId)
+          && incoming().authorUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && isClientEditor(clientId);
+        allow update: if false;
+        allow delete: if isValidId(clientId) && isValidId(insightId) && isClientEditor(clientId);
+      }
+    }
+  }
+}

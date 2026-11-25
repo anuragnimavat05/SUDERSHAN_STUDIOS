@@ -1,0 +1,6 @@
+{
+  "name": "Sudershan AI",
+  "description": "Multi-client AI Content Studio built to work alongside BrightBean Studio with brand memory, monthly calendars, Gujarati/Hindi/English captions, Reel scripts, competitor intelligence, approvals, and performance recommendations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

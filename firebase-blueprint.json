@@ -1,0 +1,229 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Agency or client reviewer account profile with isolated PII.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "agencyRole": { "type": "string", "enum": ["admin", "strategist", "client_reviewer"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "agencyRole", "createdAt", "updatedAt"]
+    },
+    "ClientWorkspace": {
+      "title": "ClientWorkspace",
+      "description": "Isolated client brand workspace with role membership and BrightBean Studio handoff configuration.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "monogram": { "type": "string", "minLength": 1, "maxLength": 4 },
+        "industry": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "website": { "type": "string", "maxLength": 300 },
+        "primaryMarkets": { "type": "string", "maxLength": 200 },
+        "brandSummary": { "type": "string", "maxLength": 2000 },
+        "bannedTerms": { "type": "string", "maxLength": 500 },
+        "defaultLanguages": { "type": "array" },
+        "brightBeanWorkspaceId": { "type": "string", "maxLength": 120 },
+        "brightBeanWebhookUrl": { "type": "string", "maxLength": 400 },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "memberRoles": { "type": "object" },
+        "memberDirectory": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "name",
+        "monogram",
+        "industry",
+        "ownerUid",
+        "memberUids",
+        "memberRoles",
+        "defaultLanguages",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BrandMemoryItem": {
+      "title": "BrandMemoryItem",
+      "description": "Persistent brand voice rule, audience persona, cultural cue, or winning hook pattern scoped to a client.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "enum": ["voice_rule", "audience_persona", "content_pillar", "cultural_context", "do_not_use", "winning_pattern"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "languageScope": { "type": "string", "enum": ["all", "en", "hi", "gu"] },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "category", "title", "detail", "languageScope", "authorUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "MonthlyCalendar": {
+      "title": "MonthlyCalendar",
+      "description": "AI-generated monthly content calendar scoped to a client workspace.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "monthLabel": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "objective": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "cadencePerWeek": { "type": "number" },
+        "slots": { "type": "array" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "monthLabel", "objective", "cadencePerWeek", "slots", "authorUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "ContentAsset": {
+      "title": "ContentAsset",
+      "description": "Multilingual caption pack, Instagram Reel script, repurposed content kit, or competitor counter-brief in the approval workflow.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "assetType": { "type": "string", "enum": ["caption_pack", "reel_script", "repurposed_kit", "calendar_brief", "competitor_counter"] },
+        "platform": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "pillar": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["draft", "in_review", "revision_requested", "approved", "handed_off"] },
+        "version": { "type": "number" },
+        "languages": { "type": "array" },
+        "captions": { "type": "object" },
+        "hashtags": { "type": "array" },
+        "cta": { "type": "string", "maxLength": 300 },
+        "reelHooks": { "type": "array" },
+        "reelScenes": { "type": "array" },
+        "repurposedOutputs": { "type": "object" },
+        "reviewerNote": { "type": "string", "maxLength": 1500 },
+        "brightBeanStatus": { "type": "string", "enum": ["pending", "exported", "webhook_sent"] },
+        "brightBeanReference": { "type": "string", "maxLength": 200 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "title", "assetType", "platform", "status", "version", "languages", "authorUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "AssetRevision": {
+      "title": "AssetRevision",
+      "description": "Immutable approval transition, revision note, or version snapshot entry for an asset.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "assetId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "version": { "type": "number" },
+        "action": { "type": "string", "enum": ["created", "submitted", "revision_requested", "revised", "approved", "handed_off"] },
+        "note": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "actorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "actorRole": { "type": "string", "enum": ["admin", "strategist", "client_reviewer"] },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "assetId", "version", "action", "note", "actorName", "actorRole", "authorUid", "memberUids", "createdAt"]
+    },
+    "CompetitorReport": {
+      "title": "CompetitorReport",
+      "description": "Saved competitor URL or content teardown with counter-angle recommendations.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "competitorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "sourceUrl": { "type": "string", "maxLength": 400 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "hookPatterns": { "type": "array" },
+        "contentGaps": { "type": "array" },
+        "counterAngles": { "type": "array" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "competitorName", "summary", "hookPatterns", "contentGaps", "counterAngles", "authorUid", "memberUids", "createdAt"]
+    },
+    "PerformanceMetric": {
+      "title": "PerformanceMetric",
+      "description": "Post-level performance metrics imported from BrightBean Studio or logged manually.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "postTitle": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "publishedDate": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "format": { "type": "string", "enum": ["Reel", "Carousel", "Static", "Story"] },
+        "language": { "type": "string", "enum": ["English", "Hindi", "Gujarati", "Multilingual"] },
+        "pillar": { "type": "string", "maxLength": 100 },
+        "reach": { "type": "number" },
+        "likes": { "type": "number" },
+        "comments": { "type": "number" },
+        "saves": { "type": "number" },
+        "shares": { "type": "number" },
+        "avgWatchSec": { "type": "number" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "postTitle", "publishedDate", "format", "language", "reach", "likes", "comments", "saves", "shares", "authorUid", "memberUids", "createdAt"]
+    },
+    "PerformanceRecommendation": {
+      "title": "PerformanceRecommendation",
+      "description": "Saved Gemini performance analysis report and strategic recommendations.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "headline": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "executiveSummary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "doubleDown": { "type": "array" },
+        "adjustments": { "type": "array" },
+        "nextMonthExperiment": { "type": "string", "maxLength": 800 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "headline", "executiveSummary", "doubleDown", "adjustments", "authorUid", "memberUids", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile document with isolated PII readable only by self or bootstrap admin."
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/ClientWorkspace" },
+      "description": "Multi-client brand workspace root document governing membership and roles."
+    },
+    "/clients/{clientId}/memory/{memoryId}": {
+      "schema": { "$ref": "#/entities/BrandMemoryItem" },
+      "description": "Client-scoped Brand Voice and Audience Memory records."
+    },
+    "/clients/{clientId}/calendars/{calendarId}": {
+      "schema": { "$ref": "#/entities/MonthlyCalendar" },
+      "description": "Client-scoped AI-generated monthly content calendars."
+    },
+    "/clients/{clientId}/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/ContentAsset" },
+      "description": "Client-scoped multilingual captions, Reel scripts, repurposed kits, and approval pipeline assets."
+    },
+    "/clients/{clientId}/revisions/{revisionId}": {
+      "schema": { "$ref": "#/entities/AssetRevision" },
+      "description": "Immutable client-scoped approval transitions and revision feedback log."
+    },
+    "/clients/{clientId}/competitors/{reportId}": {
+      "schema": { "$ref": "#/entities/CompetitorReport" },
+      "description": "Client-scoped competitor URL/copy teardowns."
+    },
+    "/clients/{clientId}/metrics/{metricId}": {
+      "schema": { "$ref": "#/entities/PerformanceMetric" },
+      "description": "Client-scoped social media performance metrics imported from BrightBean Studio or logged manually."
+    },
+    "/clients/{clientId}/insights/{insightId}": {
+      "schema": { "$ref": "#/entities/PerformanceRecommendation" },
+      "description": "Client-scoped Gemini performance diagnostic reports and recommendations."
+    }
+  }
+}
